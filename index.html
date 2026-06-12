@@ -25,7 +25,801 @@ if('serviceWorker' in navigator){
   --bg:#020304;
   --panel:#07080a;
   --line:rgba(255,255,255,.22);
+  --line2:rgba(255,255,255,.10);<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover">
+<title>Metal Desk Clock</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#050506">
+<!-- iPad/iPhoneでホーム画面追加→全画面起動用 -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="MetalClock">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<script>
+if('serviceWorker' in navigator){
+  window.addEventListener('load',function(){
+    navigator.serviceWorker.register('sw.js').catch(function(){});
+  });
+}
+</script>
+<style>
+:root{
+  --vh:1vh;
+  --bg:#020304;
+  --panel:#07080a;
+  --line:rgba(255,255,255,.22);
   --line2:rgba(255,255,255,.10);
+  --text:#f3f3f3;
+  --sub:#aaa;
+  --red:#ff1f2d;
+  --blue:#1688ff;
+  --green:#19d17b;
+  --purple:#8d39ff;
+}
+*{box-sizing:border-box}
+html,body{
+  margin:0;
+  width:100%;
+  height:100%;
+  overflow:hidden;
+  background:#000;
+  color:var(--text);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans JP",system-ui,sans-serif;
+  user-select:none;
+}
+body{display:flex;justify-content:center;align-items:center}
+.app{
+  width:100vw;
+  max-width:820px;
+  height:calc(var(--vh) * 100);
+  padding:2px 10px 8px;
+  display:grid;
+  grid-template-rows:50fr 27.5fr 22.5fr;
+  gap:8px;
+  background:
+    radial-gradient(circle at 50% 16%,rgba(255,255,255,.085),transparent 34%),
+    radial-gradient(circle at 50% 0%,rgba(160,0,0,.15),transparent 42%),
+    linear-gradient(180deg,#07080a 0%,#010203 100%);
+  position:relative;
+}
+.app:before{
+  content:"";
+  position:absolute;inset:0;pointer-events:none;
+  background:
+    linear-gradient(90deg,rgba(255,255,255,.035),transparent 8%,transparent 92%,rgba(255,255,255,.035)),
+    radial-gradient(circle at 50% 50%,transparent 70%,rgba(0,0,0,.55));
+}
+.top-icons{
+  position:absolute;
+  z-index:4;
+  left:18px;right:18px;top:10px;
+  display:flex;justify-content:space-between;
+  color:#eee;font-size:27px;opacity:.82;pointer-events:none;
+}
+.top-icons .right{display:flex;gap:24px;font-size:23px}
+#menuBtn{pointer-events:auto;cursor:pointer}
+#menuBtn:active{opacity:.5}
+.clock-area{
+  min-height:0;
+  position:relative;
+  display:flex;
+  align-items:flex-start;
+  justify-content:center;
+}
+.clock-shell{
+  width:min(96vw, 49.5vh, 650px);
+  height:min(96vw, 49.5vh, 650px);
+  position:relative;
+  margin-top:-4px;
+}
+#clockSvg{
+  width:100%;
+  height:100%;
+  display:block;
+  filter:drop-shadow(0 0 22px rgba(255,0,0,.14));
+}
+.calendar-card,.radio-card{
+  position:relative;
+  z-index:2;
+  border:1px solid var(--line);
+  background:linear-gradient(180deg,rgba(255,255,255,.05),rgba(255,255,255,.015));
+  box-shadow:inset 0 0 0 1px rgba(0,0,0,.75),0 0 24px rgba(0,0,0,.35);
+  backdrop-filter:blur(4px);
+}
+.calendar-card{
+  min-height:0;
+  border-radius:8px;
+  padding:0 6px 4px;
+  display:grid;
+  /* タイトル行をautoにして年月が曜日行に被らないように */
+  grid-template-rows:auto 22px 1fr;
+  overflow:hidden;
+}
+.cal-title{
+  display:grid;
+  grid-template-columns:44px 1fr 44px;
+  align-items:center;
+  border-bottom:1px solid var(--line);
+  min-height:29px;
+  padding:2px 0;
+}
+.arrow{color:var(--red);font-size:24px;line-height:1;text-align:center;font-weight:800;cursor:pointer;pointer-events:auto}
+.arrow:active{opacity:.5}
+#monthTitle{text-align:center;font-size:clamp(17px,2.4vh,24px);font-weight:850;letter-spacing:.03em;line-height:1.1;cursor:pointer}
+.week{
+  display:grid;grid-template-columns:repeat(7,1fr);
+  height:22px;align-items:center;border-bottom:1px solid var(--line2);
+}
+.week div{text-align:center;font-size:clamp(13px,2vh,19px);font-weight:800}
+.sun{color:var(--red)} .sat{color:var(--blue)}
+.days{
+  min-height:0;
+  display:grid;
+  grid-template-columns:repeat(7,1fr);
+  grid-template-rows:repeat(6,1fr);
+}
+.day{
+  position:relative;
+  display:flex;align-items:center;justify-content:center;
+  min-height:0;
+  padding:0;
+  border-right:1px solid rgba(255,255,255,.13);
+  border-bottom:1px solid rgba(255,255,255,.13);
+  background:rgba(0,0,0,.14);
+  color:#f4f4f4;
+  font-size:clamp(16px,2.95vh,30px);
+  font-weight:530;
+}
+.day:nth-child(7n){border-right:0}
+.day.suncol{color:var(--red)} .day.satcol{color:var(--blue)}
+.day.other{color:rgba(255,255,255,.22)}
+.day.today{color:#fff}
+.day.today:before{
+  content:"";position:absolute;inset:4px 8px;
+  border:1.5px solid var(--red);border-radius:5px;
+  box-shadow:0 0 10px rgba(255,31,45,.45),inset 0 0 14px rgba(255,31,45,.12);
+}
+.dot{
+  width:7px;height:7px;border-radius:50%;
+  position:absolute;bottom:3px;left:50%;transform:translateX(-50%);
+  background:var(--green);box-shadow:0 0 8px currentColor;
+}
+.radio-card{
+  min-height:0;
+  border-radius:8px;
+  overflow:hidden;
+  border-color:rgba(255,31,45,.55);
+  box-shadow:inset 0 0 0 1px rgba(0,0,0,.7),0 0 18px rgba(255,31,45,.16);
+  padding:10px 12px;
+  display:flex;
+  align-items:stretch;
+  gap:12px;
+  background:
+    linear-gradient(135deg,rgba(255,31,45,.11),transparent 30%),
+    repeating-linear-gradient(135deg,rgba(255,255,255,.035) 0 1px,transparent 1px 8px),
+    linear-gradient(180deg,#0a0a0b,#050506);
+}
+/* ジャケットはvw/vh基準の正方形固定サイズ。
+   「親の高さ→自分の幅(aspect-ratio)→親(Grid auto列)の幅」のような
+   循環参照を避けることで、機種によってサイズ計算が壊れるのを防ぐ */
+.art-box{
+  flex:0 0 auto;
+  width:min(24vw,22vh,140px);
+  height:min(24vw,22vh,140px);
+  border:1px solid var(--line);
+  border-radius:5px;
+  background:
+    radial-gradient(circle at 50% 45%,rgba(255,255,255,.13),transparent 45%),
+    linear-gradient(180deg,#151515,#040404);
+  display:flex;align-items:center;justify-content:center;text-align:center;
+  color:#ddd;font-weight:950;letter-spacing:.04em;line-height:1.05;
+  font-size:clamp(11px,1.5vh,15px);
+  padding:5px;text-shadow:0 0 8px rgba(255,0,0,.65);
+  position:relative;
+  overflow:hidden;
+}
+.art-box img{
+  position:absolute;inset:0;
+  width:100%;height:100%;
+  object-fit:cover;
+  display:none;
+}
+.art-box.has-art img{display:block}
+.art-box.has-art .art-fallback{display:none}
+.radio-main{
+  flex:1 1 auto;
+  min-width:0;
+  display:flex;
+  flex-direction:column;
+}
+/* テキスト部分は伸縮側。高さが足りなければここが詰まり、
+   コントロール行(再生ボタン等)は常に確保される */
+.radio-info{
+  flex:1 1 auto;
+  min-height:0;
+  min-width:0;
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  gap:2px;
+  overflow:hidden;
+}
+.now-line{
+  color:var(--red);
+  font-size:clamp(10px,1.3vh,13px);
+  letter-spacing:.08em;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.radio-title{
+  font-size:clamp(16px,2.6vh,26px);
+  font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:.04em;
+}
+.track{
+  min-width:0;
+  margin-top:2px;
+  color:#eee;
+  font-size:clamp(13px,2vh,20px);
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.track .label{color:#999;margin-right:4px}
+.controls{
+  flex:0 0 auto;
+  display:flex;
+  align-items:center;
+  gap:10px;
+  padding-top:6px;
+}
+.play{
+  flex:0 0 auto;
+  width:48px;height:48px;border-radius:50%;
+  border:1.5px solid var(--red);
+  background:#111;color:#fff;font-size:21px;
+  box-shadow:0 0 15px rgba(255,31,45,.38);
+}
+.vol{flex:0 0 auto;color:#fff;font-size:21px}
+input[type=range]{flex:1 1 auto;min-width:0;width:auto;accent-color:var(--red)}
+.live{
+  flex:0 0 auto;
+  border:1px solid var(--line);
+  border-radius:5px;
+  padding:8px 10px;
+  font-size:clamp(11px,1.6vh,15px);
+  text-align:center;white-space:nowrap;
+}
+.live:before{content:"●";color:var(--red);margin-right:5px}
+#settings{
+  position:absolute;z-index:20;inset:8%;
+  display:none;background:#090a0d;border:1px solid var(--line);border-radius:10px;padding:14px;
+  box-shadow:0 0 0 999px rgba(0,0,0,.7);
+  overflow:auto;
+}
+#settings.open{display:block}
+.setting-title{font-size:22px;font-weight:900;margin-bottom:10px}
+textarea,input.text{
+  width:100%;background:#020304;color:#fff;border:1px solid var(--line);border-radius:6px;padding:10px;font-size:15px;
+}
+label{display:block;color:#aaa;margin:10px 0 5px}
+.setting-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:10px}
+.setting-actions button{border:1px solid var(--line);background:#151515;color:#fff;border-radius:5px;padding:8px 12px}
+@media (max-height:760px){
+  .app{gap:5px;padding:1px 8px 5px;grid-template-rows:49fr 28fr 23fr}
+  .clock-shell{width:min(94vw,48.2vh,650px);height:min(94vw,48.2vh,650px)}
+  .day{font-size:clamp(15px,2.75vh,26px)}
+  .radio-card{padding:8px;gap:8px}
+  .art-box{width:min(24vw,20vh,110px);height:min(24vw,20vh,110px)}
+  .play{width:42px;height:42px}
+}
+@media (max-width:520px){
+  .app{padding-left:7px;padding-right:7px}
+  .controls{gap:6px}
+  .play{width:40px;height:40px;font-size:18px}
+  .vol{font-size:18px}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="top-icons">
+    <div id="menuBtn" title="設定">☰</div>
+    <div class="right"><span>▣</span><span>☼</span></div>
+  </div>
+
+  <section class="clock-area">
+    <div class="clock-shell">
+      <svg id="clockSvg" viewBox="0 0 500 500" aria-label="analog clock">
+        <defs>
+          <radialGradient id="dialGrad" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stop-color="#323236"/>
+            <stop offset="28%" stop-color="#101113"/>
+            <stop offset="70%" stop-color="#050506"/>
+            <stop offset="100%" stop-color="#17181b"/>
+          </radialGradient>
+          <linearGradient id="metal" x1="0" x2="1">
+            <stop offset="0" stop-color="#777"/>
+            <stop offset=".22" stop-color="#f4f4f4"/>
+            <stop offset=".5" stop-color="#575757"/>
+            <stop offset=".72" stop-color="#d6d6d6"/>
+            <stop offset="1" stop-color="#383838"/>
+          </linearGradient>
+          <filter id="glowRed">
+            <feGaussianBlur stdDeviation="2.2" result="blur"/>
+            <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+          <filter id="shadow">
+            <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#000" flood-opacity=".8"/>
+          </filter>
+          <path id="handMinuteShape" d="M246 250 L241 78 L250 57 L259 78 L254 250 Z"/>
+          <path id="handHourShape" d="M244 250 L239 118 L250 96 L261 118 L256 250 Z"/>
+        </defs>
+        <circle cx="250" cy="250" r="236" fill="#050505" stroke="#444" stroke-width="3"/>
+        <circle cx="250" cy="250" r="223" fill="url(#dialGrad)" stroke="#1e1e1e" stroke-width="7"/>
+        <circle cx="250" cy="250" r="210" fill="none" stroke="#3a3a3d" stroke-width="1"/>
+        <g opacity=".22">
+          <circle cx="250" cy="250" r="35" fill="none" stroke="#fff" stroke-width=".4"/>
+          <circle cx="250" cy="250" r="68" fill="none" stroke="#fff" stroke-width=".35"/>
+          <circle cx="250" cy="250" r="101" fill="none" stroke="#fff" stroke-width=".3"/>
+          <circle cx="250" cy="250" r="134" fill="none" stroke="#fff" stroke-width=".25"/>
+          <circle cx="250" cy="250" r="167" fill="none" stroke="#fff" stroke-width=".22"/>
+        </g>
+        <g id="ticks"></g>
+        <g id="numbers" filter="url(#shadow)"></g>
+        <g id="centerDate" filter="url(#shadow)">
+          <text id="clockDate" x="250" y="313" text-anchor="middle" fill="#eeeeee" font-size="25" letter-spacing="2">0000/00/00</text>
+          <text id="clockWeek" x="250" y="338" text-anchor="middle" fill="#ff1f2d" font-size="19" letter-spacing="4">MONDAY</text>
+        </g>
+        <g id="hands" filter="url(#shadow)">
+          <g id="hourHand"><use href="#handHourShape" fill="url(#metal)"/><path d="M249 124 L249 230" stroke="#111" stroke-width="4" opacity=".65"/></g>
+          <g id="minuteHand"><use href="#handMinuteShape" fill="url(#metal)"/><path d="M250 81 L250 225" stroke="#111" stroke-width="4" opacity=".65"/></g>
+          <g id="secondGroup">
+            <line x1="250" y1="268" x2="250" y2="45" stroke="#f2f2f2" stroke-width="2.4" stroke-linecap="round"/>
+            <line x1="250" y1="268" x2="250" y2="45" stroke="#9a9a9a" stroke-width="0.9" stroke-linecap="round" opacity=".85"/>
+            <circle cx="250" cy="45" r="2.4" fill="#f2f2f2"/>
+          </g>
+          <circle cx="250" cy="250" r="17" fill="url(#metal)" stroke="#ddd" stroke-width="1.5"/>
+          <circle cx="250" cy="250" r="6" fill="#ddd"/>
+        </g>
+      </svg>
+    </div>
+  </section>
+
+  <section class="calendar-card">
+    <div class="cal-title">
+      <div class="arrow" id="prevMonth">‹</div>
+      <div id="monthTitle" title="タップで今月に戻る">----</div>
+      <div class="arrow" id="nextMonth">›</div>
+    </div>
+    <div class="week">
+      <div class="sun">日</div><div>月</div><div>火</div><div>水</div><div>木</div><div>金</div><div class="sat">土</div>
+    </div>
+    <div class="days" id="days"></div>
+  </section>
+
+  <section class="radio-card">
+    <div class="art-box" id="artBox">
+      <img id="artImg" alt="">
+      <div class="art-fallback">METAL<br>EXPRESS<br>RADIO</div>
+    </div>
+    <div class="radio-main">
+      <div class="radio-info">
+        <div class="now-line">NOW PLAYING ・ 24/7 PURE HEAVY METAL</div>
+        <div class="radio-title">METAL EXPRESS RADIO</div>
+        <div class="track" id="trackInfo"><span class="label">曲情報:</span>確認中</div>
+      </div>
+      <div class="controls">
+        <button class="play" id="playBtn">▶</button>
+        <div class="vol">♪</div>
+        <input type="range" id="volume" min="0" max="1" step="0.01" value="0.75">
+        <div class="live" id="radioStatus">LIVE</div>
+      </div>
+    </div>
+  </section>
+
+  <div id="settings">
+    <div class="setting-title">設定</div>
+    <div style="color:#aaa;font-size:13px;line-height:1.5">
+      予定形式：YYYY-MM-DD HH:MM タイトル（カレンダーに●印が付きます）<br>
+      曲情報はストリームサーバー(SHOUTcast)から取得します。
+    </div>
+    <label>予定（カレンダー●印用）</label>
+    <textarea id="eventsInput" rows="8"></textarea>
+    <label>ラジオURL</label>
+    <input class="text" id="radioUrlInput" value="https://s39.myradiostream.com/11590/listen.mp3">
+    <label>曲情報URL 任意</label>
+    <input class="text" id="metaUrlInput" placeholder="例：https://s39.myradiostream.com/11590/stats?sid=1&json=1">
+    <div class="setting-actions">
+      <button id="closeSettings">閉じる</button>
+      <button id="saveSettings">保存</button>
+    </div>
+  </div>
+
+  <audio id="radio" preload="none"></audio>
+</div>
+
+<script>
+(function(){
+  function setVh(){document.documentElement.style.setProperty('--vh',(window.innerHeight*0.01)+'px')}
+  setVh(); window.addEventListener('resize',setVh);
+
+  var NS='http://www.w3.org/2000/svg';
+  var ticks=document.getElementById('ticks');
+  var nums=document.getElementById('numbers');
+  var hourHand=document.getElementById('hourHand');
+  var minuteHand=document.getElementById('minuteHand');
+  var secondGroup=document.getElementById('secondGroup');
+  var clockDate=document.getElementById('clockDate');
+  var clockWeek=document.getElementById('clockWeek');
+  var daysEl=document.getElementById('days');
+  var monthTitle=document.getElementById('monthTitle');
+  var radio=document.getElementById('radio');
+  var playBtn=document.getElementById('playBtn');
+  var volume=document.getElementById('volume');
+  var radioStatus=document.getElementById('radioStatus');
+  var trackInfo=document.getElementById('trackInfo');
+  var artBox=document.getElementById('artBox');
+  var artImg=document.getElementById('artImg');
+
+  var weekEn=['SUNDAY','MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY','SATURDAY'];
+
+  function pad(n){return String(n).padStart(2,'0')}
+  function ymd(d){return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())}
+
+  var radioUrl=localStorage.getItem('metalClockRadioUrl') || 'https://s39.myradiostream.com/11590/listen.mp3';
+  var customMetaUrl=localStorage.getItem('metalClockMetaUrl') || '';
+  radio.src=radioUrl;
+  radio.volume=parseFloat(localStorage.getItem('metalClockVolume') || '0.75');
+  volume.value=radio.volume;
+
+  function polar(r,deg){
+    var a=(deg-90)*Math.PI/180;
+    return {x:250+Math.cos(a)*r,y:250+Math.sin(a)*r};
+  }
+  function line(x1,y1,x2,y2,stroke,w){
+    var el=document.createElementNS(NS,'line');
+    el.setAttribute('x1',x1);el.setAttribute('y1',y1);el.setAttribute('x2',x2);el.setAttribute('y2',y2);
+    el.setAttribute('stroke',stroke);el.setAttribute('stroke-width',w);el.setAttribute('stroke-linecap','square');
+    return el;
+  }
+  function buildClock(){
+    for(var i=0;i<60;i++){
+      var major=i%5===0;
+      var p1=polar(major?198:204,i*6),p2=polar(major?213:214,i*6);
+      ticks.appendChild(line(p1.x,p1.y,p2.x,p2.y,'#ff3340',major?4:2));
+    }
+    // 1〜12を全部数字で表示（12,3,6,9は大きめにして視認性キープ）
+    for(var n=1;n<=12;n++){
+      var major4=(n%3===0);
+      var size=major4?54:42;
+      var p=polar(163,n*30);
+      var t=document.createElementNS(NS,'text');
+      t.setAttribute('x',p.x);t.setAttribute('y',p.y+size*0.34);
+      t.setAttribute('fill',major4?'#d9d9d9':'#a8a8a8');
+      t.setAttribute('font-size',size);
+      t.setAttribute('font-weight','900');
+      t.setAttribute('text-anchor','middle');
+      t.setAttribute('letter-spacing','-2');
+      t.textContent=n;
+      nums.appendChild(t);
+    }
+  }
+  function parseEvents(){
+    return (localStorage.getItem('metalClockEvents')||'').split('\n').map(function(line){
+      var m=line.match(/^(\d{4}-\d{2}-\d{2})\s+(\d{1,2}:\d{2})\s+(.+)$/);
+      if(!m)return null;
+      return {date:m[1]};
+    }).filter(Boolean);
+  }
+  function updateClock(){
+    var now=new Date();
+    // 秒針は1秒に1回カチッと動くステップ運針（整数秒）
+    var s=now.getSeconds();
+    var m=now.getMinutes()+s/60;
+    var h=(now.getHours()%12)+m/60;
+    hourHand.setAttribute('transform','rotate('+(h*30)+' 250 250)');
+    minuteHand.setAttribute('transform','rotate('+(m*6)+' 250 250)');
+    secondGroup.setAttribute('transform','rotate('+(s*6)+' 250 250)');
+    clockDate.textContent=now.getFullYear()+'/'+pad(now.getMonth()+1)+'/'+pad(now.getDate());
+    clockWeek.textContent=weekEn[now.getDay()];
+  }
+
+  var calOffset=0;
+  function renderCalendar(){
+    var now=new Date();
+    var view=new Date(now.getFullYear(),now.getMonth()+calOffset,1);
+    var year=view.getFullYear(),month=view.getMonth(),todayKey=ymd(now);
+    monthTitle.textContent=year+'年'+(month+1)+'月';
+    var events=parseEvents(),eventMap={};
+    events.forEach(function(e){eventMap[e.date]=true});
+    daysEl.innerHTML='';
+    var first=new Date(year,month,1),start=first.getDay(),last=new Date(year,month+1,0).getDate(),prevLast=new Date(year,month,0).getDate();
+    for(var i=0;i<42;i++){
+      var div=document.createElement('div');
+      div.className='day';
+      var num,key='',other=false;
+      if(i<start){num=prevLast-start+i+1;other=true}
+      else if(i>=start+last){num=i-start-last+1;other=true}
+      else{num=i-start+1;key=year+'-'+pad(month+1)+'-'+pad(num)}
+      if(i%7===0)div.className+=' suncol';
+      if(i%7===6)div.className+=' satcol';
+      if(other)div.className+=' other';
+      if(key===todayKey)div.className+=' today';
+      div.textContent=num;
+      if(key&&eventMap[key]){
+        var dot=document.createElement('span');dot.className='dot';div.appendChild(dot);
+      }
+      daysEl.appendChild(div);
+    }
+  }
+  document.getElementById('prevMonth').onclick=function(){calOffset--;renderCalendar()};
+  document.getElementById('nextMonth').onclick=function(){calOffset++;renderCalendar()};
+  monthTitle.onclick=function(){calOffset=0;renderCalendar()};
+
+  function escapeHtml(s){
+    return s.replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]});
+  }
+
+  /* ===================== 曲情報の取得 ===================== */
+  var BASE='https://s39.myradiostream.com/11590';
+  var PROXIES=[
+    function(u){return 'https://api.allorigins.win/raw?url='+encodeURIComponent(u)},
+    function(u){return 'https://corsproxy.io/?url='+encodeURIComponent(u)}
+  ];
+  function candidateMetaUrls(){
+    var direct=[
+      BASE+'/stats?sid=1&json=1',
+      BASE+'/currentsong?sid=1',
+      BASE+'/7.html'
+    ];
+    var urls=[];
+    if(customMetaUrl){
+      urls.push(customMetaUrl);
+      urls.push(PROXIES[0](customMetaUrl));
+    }
+    direct.forEach(function(u){urls.push(u)});
+    direct.forEach(function(u){urls.push(PROXIES[0](u))});
+    urls.push(PROXIES[1](direct[0]));
+    urls.push(PROXIES[1](direct[2]));
+    urls.push(PROXIES[0]('http://s39.myradiostream.com:11590/7.html'));
+    return urls;
+  }
+
+  function stripHtml(s){
+    s=(s||'').replace(/<script[\s\S]*?<\/script>/gi,' ')
+             .replace(/<style[\s\S]*?<\/style>/gi,' ')
+             .replace(/<[^>]*>/g,' ');
+    return decodeHtml(s).replace(/\s+/g,' ').trim();
+  }
+  function decodeHtml(s){
+    var ta=document.createElement('textarea');
+    ta.innerHTML=s;
+    return ta.value;
+  }
+  function cleanTrack(s){
+    s=(s||'').replace(/\s+/g,' ').trim();
+    s=s.replace(/^[-–—|:・\s]+/,'').replace(/[-–—|:・\s]+$/,'');
+    if(s.length>150)s=s.slice(0,150);
+    return s;
+  }
+  function parseMeta(text,url){
+    if(!text)return null;
+    var raw=text.trim();
+    var u=decodeURIComponent(url);
+
+    if(/^\s*\{/.test(raw)){
+      try{
+        var j=JSON.parse(raw);
+        var t=j.songtitle||j.SONGTITLE||'';
+        if(t)return {track:cleanTrack(decodeHtml(String(t)))};
+      }catch(e){}
+      return null;
+    }
+    var mt=raw.match(/<SONGTITLE>([\s\S]*?)<\/SONGTITLE>/i)||raw.match(/<CURRENTSONG>([\s\S]*?)<\/CURRENTSONG>/i);
+    if(mt&&cleanTrack(mt[1]))return {track:cleanTrack(decodeHtml(mt[1]))};
+
+    if(/7\.html/.test(u)){
+      var plain=stripHtml(raw);
+      var parts=plain.split(',');
+      if(parts.length>=7){
+        var t7=cleanTrack(parts.slice(6).join(','));
+        if(t7&&!/server is currently/i.test(t7))return {track:t7};
+      }
+      return null;
+    }
+    if(/currentsong/i.test(u)){
+      var cs=cleanTrack(stripHtml(raw));
+      if(cs&&cs.length<160&&!/error|not found/i.test(cs))return {track:cs};
+    }
+    return null;
+  }
+
+  function bust(url){
+    return url+(url.indexOf('?')>=0?'&':'?')+'_='+Date.now();
+  }
+  function fetchWithTimeout(url,ms){
+    return new Promise(function(resolve,reject){
+      var done=false;
+      var timer=setTimeout(function(){
+        if(done)return;
+        done=true;
+        reject(new Error('timeout'));
+      },ms);
+      fetch(url,{cache:'no-store'}).then(function(res){
+        if(done)return;
+        done=true;
+        clearTimeout(timer);
+        resolve(res);
+      }).catch(function(e){
+        if(done)return;
+        done=true;
+        clearTimeout(timer);
+        reject(e);
+      });
+    });
+  }
+
+  /* ===================== ジャケット取得 =====================
+   * iTunes Search APIはCORS許可済みなのでブラウザから直接叩ける。
+   * 「Artist - Title」で検索してartworkUrl100を600x600に差し替えて表示。
+   * 見つからない時はMETAL EXPRESS RADIOロゴにフォールバック。
+   * ======================================================== */
+  var lastArtQuery='';
+  function updateArtwork(track){
+    var q=cleanTrack((track||'').replace(/\s*-\s*/g,' ').replace(/[\(\[].*?[\)\]]/g,''));
+    if(!q)return;
+    if(q===lastArtQuery)return;
+    lastArtQuery=q;
+    fetchWithTimeout('https://itunes.apple.com/search?media=music&entity=song&limit=1&term='+encodeURIComponent(q),6500)
+      .then(function(r){return r.json()})
+      .then(function(d){
+        var hit=d&&d.results&&d.results[0];
+        if(hit&&hit.artworkUrl100){
+          artImg.onload=function(){artBox.classList.add('has-art')};
+          artImg.src=hit.artworkUrl100.replace('100x100','600x600');
+        }else{
+          artBox.classList.remove('has-art');
+        }
+      })
+      .catch(function(){artBox.classList.remove('has-art')});
+  }
+
+  var lastGoodUrl='',lastTrack='',firstFetch=true,fetching=false;
+  async function tryUrls(urls){
+    for(var i=0;i<urls.length;i++){
+      try{
+        var res=await fetchWithTimeout(bust(urls[i]),6500);
+        if(!res.ok)continue;
+        var meta=parseMeta(await res.text(),urls[i]);
+        if(meta&&meta.track)return {meta:meta,url:urls[i]};
+      }catch(e){}
+    }
+    return null;
+  }
+  async function fetchNowPlaying(){
+    if(fetching)return;
+    fetching=true;
+    if(firstFetch)trackInfo.innerHTML='<span class="label">曲情報:</span>確認中';
+    var urls=candidateMetaUrls();
+    if(lastGoodUrl){
+      urls=[lastGoodUrl].concat(urls.filter(function(u){return u!==lastGoodUrl}));
+    }
+    var hit=await tryUrls(urls);
+    firstFetch=false;
+    if(hit){
+      lastGoodUrl=hit.url;
+      if(hit.meta.track!==lastTrack){
+        lastTrack=hit.meta.track;
+        trackInfo.innerHTML='<span class="label">曲情報:</span>'+escapeHtml(hit.meta.track);
+        updateArtwork(hit.meta.track);
+      }
+    }else if(!lastTrack){
+      trackInfo.innerHTML='<span class="label">曲情報:</span>取得できませんでした';
+    }
+    fetching=false;
+  }
+
+  document.getElementById('menuBtn').onclick=function(){
+    document.getElementById('eventsInput').value=localStorage.getItem('metalClockEvents')||'';
+    document.getElementById('radioUrlInput').value=radioUrl;
+    document.getElementById('metaUrlInput').value=customMetaUrl;
+    document.getElementById('settings').className='open';
+  };
+  document.getElementById('closeSettings').onclick=function(){document.getElementById('settings').className=''};
+  document.getElementById('saveSettings').onclick=function(){
+    localStorage.setItem('metalClockEvents',document.getElementById('eventsInput').value);
+    var newUrl=document.getElementById('radioUrlInput').value.trim();
+    customMetaUrl=document.getElementById('metaUrlInput').value.trim();
+    localStorage.setItem('metalClockMetaUrl',customMetaUrl);
+    if(newUrl!==radioUrl){
+      var wasPlaying=!radio.paused;
+      radioUrl=newUrl;
+      localStorage.setItem('metalClockRadioUrl',radioUrl);
+      radio.src=radioUrl;
+      if(wasPlaying){
+        radio.play().catch(function(){
+          playBtn.textContent='▶';
+          radioStatus.textContent='NG';
+        });
+      }
+    }
+    document.getElementById('settings').className='';
+    lastGoodUrl='';lastTrack='';firstFetch=true;lastArtQuery='';
+    renderCalendar();
+    fetchNowPlaying();
+  };
+  volume.oninput=function(){
+    radio.volume=parseFloat(volume.value);
+    localStorage.setItem('metalClockVolume',volume.value);
+  };
+  playBtn.onclick=function(){
+    if(radio.paused){
+      radio.play().then(function(){
+        playBtn.textContent='⏸';
+        radioStatus.textContent='LIVE';
+        fetchNowPlaying();
+      }).catch(function(){radioStatus.textContent='NG'});
+    }else{
+      radio.pause();
+      playBtn.textContent='▶';
+      radioStatus.textContent='STOP';
+    }
+  };
+  radio.addEventListener('error',function(){
+    playBtn.textContent='▶';
+    radioStatus.textContent='NG';
+  });
+  radio.addEventListener('stalled',function(){
+    if(!radio.paused)radioStatus.textContent='再接続中';
+  });
+  radio.addEventListener('playing',function(){
+    radioStatus.textContent='LIVE';
+    playBtn.textContent='⏸';
+  });
+
+  /* ===================== 画面スリープ防止 =====================
+   * Wake Lock APIで画面が消えないようにする。
+   * - 起動時に即取得を試みる（取れなければユーザー操作後に再試行）
+   * - OSや省電力機能に解放されたら自動で取り直す
+   * - タブ復帰時＋30秒ごとの保険チェックでも取り直す
+   * ※Wake Lockはページが前面にある間だけ有効。タブレット側でも
+   *   自動ロック設定をオフにしておくと確実。
+   * ========================================================== */
+  var wakeLock=null;
+  function requestWakeLock(){
+    if(!('wakeLock' in navigator))return;
+    if(wakeLock&&!wakeLock.released)return;
+    navigator.wakeLock.request('screen').then(function(lock){
+      wakeLock=lock;
+      // 省電力などで勝手に解放されたら、画面が見えている限り取り直す
+      lock.addEventListener('release',function(){
+        wakeLock=null;
+        if(document.visibilityState==='visible'){
+          setTimeout(requestWakeLock,1000);
+        }
+      });
+    }).catch(function(){});
+  }
+  requestWakeLock(); // 起動時に即取得（ブラウザが拒否したら下のフックで再取得）
+  document.body.addEventListener('click',requestWakeLock);
+  document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible')requestWakeLock()});
+  setInterval(function(){if(document.visibilityState==='visible')requestWakeLock()},30000);
+
+  buildClock();
+  renderCalendar();
+  updateClock();
+  fetchNowPlaying();
+  setInterval(updateClock,250);
+  setInterval(renderCalendar,600000);
+  setInterval(fetchNowPlaying,45000);
+})();
+</script>
+</body>
+</html>
+
   --text:#f3f3f3;
   --sub:#aaa;
   --red:#ff1f2d;
