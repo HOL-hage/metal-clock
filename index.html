@@ -148,12 +148,14 @@ body{display:flex;justify-content:center;align-items:center}
 }
 .day:nth-child(7n){border-right:0}
 .day.suncol{color:var(--red)} .day.satcol{color:var(--blue)}
+.day.holiday{color:var(--red)}
 .day.other{color:rgba(255,255,255,.22)}
-.day.today{color:#fff}
+.day.today{color:#fff;font-weight:900}
 .day.today:before{
-  content:"";position:absolute;inset:4px 8px;
-  border:1.5px solid var(--red);border-radius:5px;
-  box-shadow:0 0 10px rgba(255,31,45,.45),inset 0 0 14px rgba(255,31,45,.12);
+  content:"";position:absolute;inset:3px 6px;
+  border:3px solid var(--red);border-radius:7px;
+  background:rgba(255,31,45,.22);
+  box-shadow:0 0 14px rgba(255,31,45,.65),inset 0 0 16px rgba(255,31,45,.25);
 }
 .dot{
   width:7px;height:7px;border-radius:50%;
@@ -498,6 +500,29 @@ label{display:block;color:#aaa;margin:10px 0 5px}
     clockWeek.textContent=weekEn[now.getDay()];
   }
 
+  /* ===================== 日本の祝日 =====================
+   * holidays-jp API（内閣府の祝日CSV由来・CORS許可済み）から
+   * 前年・今年・翌年の祝日を取得。localStorageにキャッシュして
+   * オフライン時や起動直後もキャッシュで色分けできるようにする。
+   * ====================================================== */
+  var holidays={};
+  function loadHolidays(){
+    try{
+      var c=JSON.parse(localStorage.getItem('metalClockHolidays')||'null');
+      if(c&&c.data)holidays=c.data;
+    }catch(e){}
+    fetchWithTimeout('https://holidays-jp.github.io/api/v1/date.json',8000)
+      .then(function(r){return r.json()})
+      .then(function(d){
+        if(d&&typeof d==='object'){
+          holidays=d;
+          localStorage.setItem('metalClockHolidays',JSON.stringify({data:d,t:Date.now()}));
+          renderCalendar();
+        }
+      })
+      .catch(function(){});
+  }
+
   var calOffset=0;
   function renderCalendar(){
     var now=new Date();
@@ -517,6 +542,7 @@ label{display:block;color:#aaa;margin:10px 0 5px}
       else{num=i-start+1;key=year+'-'+pad(month+1)+'-'+pad(num)}
       if(i%7===0)div.className+=' suncol';
       if(i%7===6)div.className+=' satcol';
+      if(key&&holidays[key])div.className+=' holiday';
       if(other)div.className+=' other';
       if(key===todayKey)div.className+=' today';
       div.textContent=num;
@@ -780,12 +806,14 @@ label{display:block;color:#aaa;margin:10px 0 5px}
   setInterval(function(){if(document.visibilityState==='visible')requestWakeLock()},30000);
 
   buildClock();
+  loadHolidays();
   renderCalendar();
   updateClock();
   fetchNowPlaying();
   setInterval(updateClock,250);
   setInterval(renderCalendar,600000);
   setInterval(fetchNowPlaying,45000);
+  setInterval(loadHolidays,86400000); // 祝日データは1日1回更新（年が変わっても追従）
 })();
 </script>
 </body>
