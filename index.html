@@ -51,7 +51,7 @@ body{display:flex;justify-content:center;align-items:center}
   height:calc(var(--vh) * 100);
   padding:2px 10px 8px;
   display:grid;
-  grid-template-rows:50fr 27.5fr 22.5fr;
+  grid-template-rows:48fr 1fr auto;
   gap:8px;
   background:
     radial-gradient(circle at 50% 16%,rgba(255,255,255,.085),transparent 34%),
@@ -136,15 +136,34 @@ body{display:flex;justify-content:center;align-items:center}
 }
 .day{
   position:relative;
-  display:flex;align-items:center;justify-content:center;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:flex-start;
   min-height:0;
-  padding:0;
+  padding:3px 1px 0;
   border-right:1px solid rgba(255,255,255,.13);
   border-bottom:1px solid rgba(255,255,255,.13);
   background:rgba(0,0,0,.14);
   color:#f4f4f4;
-  font-size:clamp(16px,2.95vh,30px);
+  font-size:clamp(15px,2.6vh,27px);
   font-weight:530;
+  line-height:1;
+  overflow:hidden;
+}
+.day .dnum{position:relative;z-index:1}
+.day .hname{
+  position:relative;z-index:1;
+  margin-top:1px;
+  font-size:clamp(7px,1.05vh,10px);
+  font-weight:600;
+  line-height:1.05;
+  color:rgba(255,90,100,.92);
+  text-align:center;
+  width:100%;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
 }
 .day:nth-child(7n){border-right:0}
 .day.suncol{color:var(--red)} .day.satcol{color:var(--blue)}
@@ -158,9 +177,9 @@ body{display:flex;justify-content:center;align-items:center}
   box-shadow:0 0 14px rgba(255,31,45,.65),inset 0 0 16px rgba(255,31,45,.25);
 }
 .dot{
-  width:7px;height:7px;border-radius:50%;
-  position:absolute;bottom:3px;left:50%;transform:translateX(-50%);
-  background:var(--green);box-shadow:0 0 8px currentColor;
+  width:6px;height:6px;border-radius:50%;
+  position:absolute;bottom:3px;right:4px;
+  background:var(--green);box-shadow:0 0 8px currentColor;z-index:1;
 }
 .radio-card{
   min-height:0;
@@ -182,8 +201,8 @@ body{display:flex;justify-content:center;align-items:center}
    循環参照を避けることで、機種によってサイズ計算が壊れるのを防ぐ */
 .art-box{
   flex:0 0 auto;
-  width:min(24vw,22vh,140px);
-  height:min(24vw,22vh,140px);
+  width:clamp(96px,16vh,128px);
+  height:clamp(96px,16vh,128px);
   border:1px solid var(--line);
   border-radius:5px;
   background:
@@ -282,11 +301,11 @@ label{display:block;color:#aaa;margin:10px 0 5px}
 .setting-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:10px}
 .setting-actions button{border:1px solid var(--line);background:#151515;color:#fff;border-radius:5px;padding:8px 12px}
 @media (max-height:760px){
-  .app{gap:5px;padding:1px 8px 5px;grid-template-rows:49fr 28fr 23fr}
+  .app{gap:5px;padding:1px 8px 5px;grid-template-rows:48fr 1fr auto}
   .clock-shell{width:min(94vw,48.2vh,650px);height:min(94vw,48.2vh,650px)}
-  .day{font-size:clamp(15px,2.75vh,26px)}
+  .day{font-size:clamp(15px,2.6vh,26px)}
   .radio-card{padding:8px;gap:8px}
-  .art-box{width:min(24vw,20vh,110px);height:min(24vw,20vh,110px)}
+  .art-box{width:clamp(88px,15vh,112px);height:clamp(88px,15vh,112px)}
   .play{width:42px;height:42px}
 }
 @media (max-width:520px){
@@ -545,7 +564,16 @@ label{display:block;color:#aaa;margin:10px 0 5px}
       if(key&&holidays[key])div.className+=' holiday';
       if(other)div.className+=' other';
       if(key===todayKey)div.className+=' today';
-      div.textContent=num;
+      var dnum=document.createElement('span');
+      dnum.className='dnum';
+      dnum.textContent=num;
+      div.appendChild(dnum);
+      if(key&&holidays[key]&&!other){
+        var hn=document.createElement('span');
+        hn.className='hname';
+        hn.textContent=holidays[key];
+        div.appendChild(hn);
+      }
       if(key&&eventMap[key]){
         var dot=document.createElement('span');dot.className='dot';div.appendChild(dot);
       }
@@ -804,6 +832,40 @@ label{display:block;color:#aaa;margin:10px 0 5px}
   document.body.addEventListener('click',requestWakeLock);
   document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible')requestWakeLock()});
   setInterval(function(){if(document.visibilityState==='visible')requestWakeLock()},30000);
+
+  /* ===================== 深夜の自動リロード =====================
+   * 長時間稼働でのメモリ蓄積対策。毎日2:00〜2:05の間に1回だけ
+   * ページをリロードしてメモリをリフレッシュする。
+   * 再生中だった場合はフラグを残し、リロード後に自動で再生を再開する。
+   * ============================================================ */
+  var reloadedToday='';
+  setInterval(function(){
+    var d=new Date();
+    var dayKey=ymd(d);
+    if(d.getHours()===2 && d.getMinutes()<5 && reloadedToday!==dayKey){
+      reloadedToday=dayKey;
+      if(!radio.paused){
+        sessionStorage.setItem('metalClockResume','1');
+      }
+      location.reload();
+    }
+  },30000);
+
+  // リロード直後、再生中だったら自動で再開（autoplay制限はWakeLock取得済み＝
+  // ユーザー操作後のセッションなので通常は再生可能）
+  if(sessionStorage.getItem('metalClockResume')==='1'){
+    sessionStorage.removeItem('metalClockResume');
+    setTimeout(function(){
+      radio.play().then(function(){
+        playBtn.textContent='⏸';
+        radioStatus.textContent='LIVE';
+        fetchNowPlaying();
+      }).catch(function(){
+        playBtn.textContent='▶';
+        radioStatus.textContent='STOP';
+      });
+    },800);
+  }
 
   buildClock();
   loadHolidays();
