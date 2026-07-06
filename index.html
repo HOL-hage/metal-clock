@@ -22,16 +22,12 @@ if('serviceWorker' in navigator){
 <style>
 :root{
   --vh:1vh;
-  --bg:#020304;
-  --panel:#07080a;
   --line:rgba(255,255,255,.22);
   --line2:rgba(255,255,255,.10);
   --text:#f3f3f3;
-  --sub:#aaa;
   --red:#ff1f2d;
   --blue:#1688ff;
   --green:#19d17b;
-  --purple:#8d39ff;
 }
 *{box-sizing:border-box}
 html,body{
@@ -314,6 +310,35 @@ label{display:block;color:#aaa;margin:10px 0 5px}
   .play{width:40px;height:40px;font-size:18px}
   .vol{font-size:18px}
 }
+/* ===== 横画面：時計を左、カレンダー＋ラジオを右の2カラムに =====
+   ※既存のmax-height/max-widthクエリより後に書いて優先させる */
+@media (orientation:landscape) and (min-width:640px){
+  .app{
+    max-width:1500px;
+    padding:8px 14px;
+    gap:12px;
+    grid-template-columns:auto minmax(0,1fr);
+    grid-template-rows:minmax(0,1fr) auto;
+  }
+  .clock-area{
+    grid-row:1 / 3;
+    grid-column:1;
+    align-items:center;
+  }
+  .clock-shell{
+    width:min(88vh,44vw,640px);
+    height:min(88vh,44vw,640px);
+    margin-top:0;
+  }
+  .calendar-card{grid-column:2;grid-row:1}
+  .radio-card{grid-column:2;grid-row:2}
+  /* 横画面はvhが小さくなるのでvh基準のフォントを少し持ち上げる */
+  #monthTitle{font-size:clamp(16px,3.4vh,24px)}
+  .week div{font-size:clamp(12px,2.8vh,18px)}
+  .day{font-size:clamp(14px,3.8vh,26px)}
+  .day .hname{font-size:clamp(7px,1.6vh,10px)}
+  .art-box{width:clamp(88px,20vh,124px);height:clamp(88px,20vh,124px)}
+}
 </style>
 </head>
 <body>
@@ -506,6 +531,7 @@ label{display:block;color:#aaa;margin:10px 0 5px}
       return {date:m[1]};
     }).filter(Boolean);
   }
+  var lastDateKey=ymd(new Date());
   function updateClock(){
     var now=new Date();
     // 秒針は1秒に1回カチッと動くステップ運針（整数秒）
@@ -517,6 +543,9 @@ label{display:block;color:#aaa;margin:10px 0 5px}
     secondGroup.setAttribute('transform','rotate('+(s*6)+' 250 250)');
     clockDate.textContent=now.getFullYear()+'/'+pad(now.getMonth()+1)+'/'+pad(now.getDate());
     clockWeek.textContent=weekEn[now.getDay()];
+    // 日付が変わったら「今日」の枠を即座に動かす（10分間隔の再描画を待たない）
+    var dk=ymd(now);
+    if(dk!==lastDateKey){lastDateKey=dk;renderCalendar()}
   }
 
   /* ===================== 日本の祝日 =====================
@@ -704,6 +733,7 @@ label{display:block;color:#aaa;margin:10px 0 5px}
         var hit=d&&d.results&&d.results[0];
         if(hit&&hit.artworkUrl100){
           artImg.onload=function(){artBox.classList.add('has-art')};
+          artImg.onerror=function(){artBox.classList.remove('has-art')}; // 画像404等はロゴに戻す
           artImg.src=hit.artworkUrl100.replace('100x100','600x600');
         }else{
           artBox.classList.remove('has-art');
@@ -727,24 +757,27 @@ label{display:block;color:#aaa;margin:10px 0 5px}
   async function fetchNowPlaying(){
     if(fetching)return;
     fetching=true;
-    if(firstFetch)trackInfo.innerHTML='<span class="label">曲情報:</span>確認中';
-    var urls=candidateMetaUrls();
-    if(lastGoodUrl){
-      urls=[lastGoodUrl].concat(urls.filter(function(u){return u!==lastGoodUrl}));
-    }
-    var hit=await tryUrls(urls);
-    firstFetch=false;
-    if(hit){
-      lastGoodUrl=hit.url;
-      if(hit.meta.track!==lastTrack){
-        lastTrack=hit.meta.track;
-        trackInfo.innerHTML='<span class="label">曲情報:</span>'+escapeHtml(hit.meta.track);
-        updateArtwork(hit.meta.track);
+    try{
+      if(firstFetch)trackInfo.innerHTML='<span class="label">曲情報:</span>確認中';
+      var urls=candidateMetaUrls();
+      if(lastGoodUrl){
+        urls=[lastGoodUrl].concat(urls.filter(function(u){return u!==lastGoodUrl}));
       }
-    }else if(!lastTrack){
-      trackInfo.innerHTML='<span class="label">曲情報:</span>取得できませんでした';
+      var hit=await tryUrls(urls);
+      firstFetch=false;
+      if(hit){
+        lastGoodUrl=hit.url;
+        if(hit.meta.track!==lastTrack){
+          lastTrack=hit.meta.track;
+          trackInfo.innerHTML='<span class="label">曲情報:</span>'+escapeHtml(hit.meta.track);
+          updateArtwork(hit.meta.track);
+        }
+      }else if(!lastTrack){
+        trackInfo.innerHTML='<span class="label">曲情報:</span>取得できませんでした';
+      }
+    }finally{
+      fetching=false; // 例外時もフラグを確実に戻す（戻らないと以後の取得が全部スキップされる）
     }
-    fetching=false;
   }
 
   document.getElementById('menuBtn').onclick=function(){
@@ -796,6 +829,7 @@ label{display:block;color:#aaa;margin:10px 0 5px}
   radio.addEventListener('error',function(){
     playBtn.textContent='▶';
     radioStatus.textContent='NG';
+    scheduleReconnect();
   });
   radio.addEventListener('stalled',function(){
     if(!radio.paused)radioStatus.textContent='再接続中';
@@ -803,7 +837,39 @@ label{display:block;color:#aaa;margin:10px 0 5px}
   radio.addEventListener('playing',function(){
     radioStatus.textContent='LIVE';
     playBtn.textContent='⏸';
+    reconnectTries=0; // 再生できたらリトライ回数リセット
   });
+
+  /* ===================== 配信の自動再接続 =====================
+   * 24時間運用中に回線瞬断やサーバー再起動でaudioがerrorで死ぬと、
+   * 手動でタップするまで無音のままになる。再生中に切れた場合だけ、
+   * 間隔を広げながら（5秒→10秒→20秒…最大60秒）自動でload+playを
+   * 試み続ける。手動で停止した場合はリトライしない。
+   * ========================================================== */
+  var reconnectTries=0, reconnectTimer=null, wasPlayingBeforeError=false;
+  radio.addEventListener('play',function(){wasPlayingBeforeError=true});
+  radio.addEventListener('pause',function(){
+    // errorによるpauseは除外：ユーザー操作のpauseだけ再接続を止める
+    if(!radio.error)wasPlayingBeforeError=false;
+  });
+  function scheduleReconnect(){
+    if(!wasPlayingBeforeError)return; // 再生してなかったなら何もしない
+    if(reconnectTimer)return;
+    var wait=Math.min(5000*Math.pow(2,reconnectTries),60000);
+    reconnectTries++;
+    radioStatus.textContent='再接続中';
+    reconnectTimer=setTimeout(function(){
+      reconnectTimer=null;
+      radio.src=radioUrl; // srcを張り直してバッファを完全リセット
+      radio.load();
+      radio.play().then(function(){
+        playBtn.textContent='⏸';
+        radioStatus.textContent='LIVE';
+      }).catch(function(){
+        scheduleReconnect(); // 失敗したら次の間隔で再試行
+      });
+    },wait);
+  }
 
   /* ===================== 画面スリープ防止 =====================
    * Wake Lock APIで画面が消えないようにする。
@@ -836,14 +902,14 @@ label{display:block;color:#aaa;margin:10px 0 5px}
   /* ===================== 深夜の自動リロード =====================
    * 長時間稼働でのメモリ蓄積対策。毎日2:00〜2:05の間に1回だけ
    * ページをリロードしてメモリをリフレッシュする。
-   * 再生中だった場合はフラグを残し、リロード後に自動で再生を再開する。
+   * 実施済みフラグはlocalStorageに保存する（メモリ変数だとリロードで
+   * 消えてしまい、2時台の間リロードを繰り返すバグになる）。
    * ============================================================ */
-  var reloadedToday='';
   setInterval(function(){
     var d=new Date();
     var dayKey=ymd(d);
-    if(d.getHours()===2 && d.getMinutes()<5 && reloadedToday!==dayKey){
-      reloadedToday=dayKey;
+    if(d.getHours()===2 && d.getMinutes()<5 && localStorage.getItem('metalClockLastReload')!==dayKey){
+      localStorage.setItem('metalClockLastReload',dayKey);
       if(!radio.paused){
         sessionStorage.setItem('metalClockResume','1');
       }
