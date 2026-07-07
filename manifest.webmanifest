@@ -4,8 +4,8 @@
   "description": "Analog clock + calendar + Metal Express Radio player",
   "start_url": "./index.html",
   "scope": "./",
-  "display": "fullscreen",
-  "orientation": "portrait",
+  "display": "standalone",
+  "orientation": "any",
   "background_color": "#000000",
   "theme_color": "#050506",
   "icons": [
