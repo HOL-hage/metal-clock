@@ -161,6 +161,19 @@ body{display:flex;justify-content:center;align-items:center}
   overflow:hidden;
   text-overflow:ellipsis;
 }
+.day .ename{
+  position:relative;z-index:1;
+  margin-top:1px;
+  font-size:clamp(7px,1.05vh,10px);
+  font-weight:600;
+  line-height:1.05;
+  color:rgba(80,230,150,.95);
+  text-align:center;
+  width:100%;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
 .day:nth-child(7n){border-right:0}
 .day.suncol{color:var(--red)} .day.satcol{color:var(--blue)}
 .day.holiday{color:var(--red)}
@@ -250,13 +263,13 @@ body{display:flex;justify-content:center;align-items:center}
 .track{
   min-width:0;
   margin-top:2px;
-  color:#eee;
-  font-size:clamp(13px,2vh,20px);
+  color:var(--red);
+  font-size:clamp(10px,1.5vh,14px);
+  letter-spacing:.08em;
   white-space:nowrap;
   overflow:hidden;
   text-overflow:ellipsis;
 }
-.track .label{color:#999;margin-right:4px}
 .controls{
   flex:0 0 auto;
   display:flex;
@@ -424,9 +437,9 @@ label{display:block;color:#aaa;margin:10px 0 5px}
     </div>
     <div class="radio-main">
       <div class="radio-info">
-        <div class="now-line">NOW PLAYING ・ 24/7 PURE HEAVY METAL</div>
-        <div class="radio-title">METAL EXPRESS RADIO</div>
-        <div class="track" id="trackInfo"><span class="label">曲情報:</span>確認中</div>
+        <div class="now-line">METAL EXPRESS RADIO ・ 24/7 PURE HEAVY METAL</div>
+        <div class="radio-title" id="trackInfo">曲情報 確認中…</div>
+        <div class="track" id="nowPlayingSub">NOW PLAYING</div>
       </div>
       <div class="controls">
         <button class="play" id="playBtn">▶</button>
@@ -444,7 +457,9 @@ label{display:block;color:#aaa;margin:10px 0 5px}
       曲情報はストリームサーバー(SHOUTcast)から取得します。
     </div>
     <label>予定（カレンダー●印用）</label>
-    <textarea id="eventsInput" rows="8"></textarea>
+    <textarea id="eventsInput" rows="6"></textarea>
+    <label>GoogleカレンダーURL（iCal形式・任意）</label>
+    <input class="text" id="gcalUrlInput" placeholder="https://calendar.google.com/calendar/ical/〜/basic.ics">
     <label>ラジオURL</label>
     <input class="text" id="radioUrlInput" value="https://s39.myradiostream.com/11590/listen.mp3">
     <label>曲情報URL 任意</label>
@@ -571,6 +586,116 @@ label{display:block;color:#aaa;margin:10px 0 5px}
       .catch(function(){});
   }
 
+  /* ===================== Googleカレンダー連携 =====================
+   * Googleカレンダーの「iCal形式の非公開URL」(basic.ics)を設定に入れると
+   * 予定を取得してカレンダーに表示する。ICSはCORS非対応なので
+   * 直接fetch→失敗したらプロキシ経由の順で試す。
+   * 繰り返し予定(RRULE)はDAILY/WEEKLY/MONTHLY/YEARLYの基本形のみ
+   * 展開対応（表示窓：過去45日〜先75日）。結果はキャッシュして
+   * オフライン時・起動直後も前回分を表示する。
+   * ============================================================== */
+  var gcalUrl=localStorage.getItem('metalClockGcalUrl')||'';
+  var gcalMap={}; // 'YYYY-MM-DD' -> [予定名,...]
+  try{
+    var gc=JSON.parse(localStorage.getItem('metalClockGcalCache')||'null');
+    if(gc&&gc.map)gcalMap=gc.map;
+  }catch(e){}
+
+  function icsToLocalYmd(val){
+    var m;
+    if(m=val.match(/^(\d{4})(\d{2})(\d{2})$/)){ // 終日
+      return m[1]+'-'+m[2]+'-'+m[3];
+    }
+    if(m=val.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/)){ // UTC
+      return ymd(new Date(Date.UTC(+m[1],+m[2]-1,+m[3],+m[4],+m[5],+m[6])));
+    }
+    if(m=val.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})/)){ // ローカル/TZID（JST端末前提でローカル扱い）
+      return m[1]+'-'+m[2]+'-'+m[3];
+    }
+    return null;
+  }
+  function unescapeIcs(s){
+    return s.replace(/\\n/g,' ').replace(/\\,/g,',').replace(/\\;/g,';').replace(/\\\\/g,'\\');
+  }
+  function parseICS(text){
+    // 折り返し行(改行+スペース)を結合してから1行ずつ処理
+    var lines=text.replace(/\r\n[ \t]/g,'').replace(/\n[ \t]/g,'').replace(/\r/g,'').split('\n');
+    var evs=[],cur=null;
+    for(var i=0;i<lines.length;i++){
+      var line=lines[i];
+      if(line==='BEGIN:VEVENT'){cur={ex:{}};continue}
+      if(line==='END:VEVENT'){if(cur&&cur.start&&cur.title)evs.push(cur);cur=null;continue}
+      if(!cur)continue;
+      var ci=line.indexOf(':');
+      if(ci<0)continue;
+      var keyPart=line.slice(0,ci),val=line.slice(ci+1);
+      var key=keyPart.split(';')[0];
+      if(key==='SUMMARY')cur.title=unescapeIcs(val);
+      else if(key==='DTSTART')cur.start=val;
+      else if(key==='RRULE')cur.rrule=val;
+      else if(key==='EXDATE'){
+        val.split(',').forEach(function(v){var k=icsToLocalYmd(v.trim());if(k)cur.ex[k]=true});
+      }
+    }
+    return evs;
+  }
+  function expandEvents(evs){
+    var map={};
+    var now=new Date();
+    var winStart=new Date(now.getFullYear(),now.getMonth(),now.getDate()-45);
+    var winEnd=new Date(now.getFullYear(),now.getMonth(),now.getDate()+75);
+    function add(dateObj,ev){
+      var k=ymd(dateObj);
+      if(ev.ex[k])return;
+      if(dateObj<winStart||dateObj>winEnd)return;
+      (map[k]=map[k]||[]).push(ev.title);
+    }
+    evs.forEach(function(ev){
+      var sk=icsToLocalYmd(ev.start);
+      if(!sk)return;
+      var sp=sk.split('-');
+      var sd=new Date(+sp[0],+sp[1]-1,+sp[2]);
+      if(!ev.rrule){add(sd,ev);return}
+      // RRULEの基本展開
+      var rule={};
+      ev.rrule.split(';').forEach(function(kv){var p=kv.split('=');rule[p[0]]=p[1]});
+      var freq=rule.FREQ,interval=parseInt(rule.INTERVAL||'1',10);
+      var until=rule.UNTIL?icsToLocalYmd(rule.UNTIL):null;
+      var count=rule.COUNT?parseInt(rule.COUNT,10):Infinity;
+      if(!freq)return;
+      var d=new Date(sd.getTime()),n=0;
+      while(n<count&&n<1000){
+        if(d>winEnd)break;
+        var dk=ymd(d);
+        if(until&&dk>until)break;
+        add(d,ev);
+        n++;
+        if(freq==='DAILY')d.setDate(d.getDate()+interval);
+        else if(freq==='WEEKLY')d.setDate(d.getDate()+7*interval);
+        else if(freq==='MONTHLY')d.setMonth(d.getMonth()+interval);
+        else if(freq==='YEARLY')d.setFullYear(d.getFullYear()+interval);
+        else break;
+      }
+    });
+    return map;
+  }
+  function loadGcal(){
+    if(!gcalUrl)return;
+    var urls=[gcalUrl,PROXIES[0](gcalUrl),PROXIES[1](gcalUrl)];
+    (function tryNext(i){
+      if(i>=urls.length)return;
+      fetchWithTimeout(urls[i],10000)
+        .then(function(r){if(!r.ok)throw 0;return r.text()})
+        .then(function(text){
+          if(text.indexOf('BEGIN:VCALENDAR')<0)throw 0;
+          gcalMap=expandEvents(parseICS(text));
+          localStorage.setItem('metalClockGcalCache',JSON.stringify({map:gcalMap,t:Date.now()}));
+          renderCalendar();
+        })
+        .catch(function(){tryNext(i+1)});
+    })(0);
+  }
+
   var calOffset=0;
   function renderCalendar(){
     var now=new Date();
@@ -597,13 +722,22 @@ label{display:block;color:#aaa;margin:10px 0 5px}
       dnum.className='dnum';
       dnum.textContent=num;
       div.appendChild(dnum);
-      if(key&&holidays[key]&&!other){
+      var isHoliday=key&&holidays[key]&&!other;
+      if(isHoliday){
         var hn=document.createElement('span');
         hn.className='hname';
         hn.textContent=holidays[key];
         div.appendChild(hn);
       }
-      if(key&&eventMap[key]){
+      var gevs=(key&&!other&&gcalMap[key])?gcalMap[key]:null;
+      if(gevs&&gevs.length&&!isHoliday){
+        // 予定名を1件表示（祝日名がある日はスペースの都合で●印のみ）
+        var en=document.createElement('span');
+        en.className='ename';
+        en.textContent=gevs[0];
+        div.appendChild(en);
+      }
+      if(key&&(eventMap[key]||(gevs&&(gevs.length>1||(isHoliday&&gevs.length))))){
         var dot=document.createElement('span');dot.className='dot';div.appendChild(dot);
       }
       daysEl.appendChild(div);
@@ -612,10 +746,6 @@ label{display:block;color:#aaa;margin:10px 0 5px}
   document.getElementById('prevMonth').onclick=function(){calOffset--;renderCalendar()};
   document.getElementById('nextMonth').onclick=function(){calOffset++;renderCalendar()};
   monthTitle.onclick=function(){calOffset=0;renderCalendar()};
-
-  function escapeHtml(s){
-    return s.replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]});
-  }
 
   /* ===================== 曲情報の取得 ===================== */
   var BASE='https://s39.myradiostream.com/11590';
@@ -758,7 +888,7 @@ label{display:block;color:#aaa;margin:10px 0 5px}
     if(fetching)return;
     fetching=true;
     try{
-      if(firstFetch)trackInfo.innerHTML='<span class="label">曲情報:</span>確認中';
+      if(firstFetch)trackInfo.textContent='曲情報 確認中…';
       var urls=candidateMetaUrls();
       if(lastGoodUrl){
         urls=[lastGoodUrl].concat(urls.filter(function(u){return u!==lastGoodUrl}));
@@ -769,11 +899,11 @@ label{display:block;color:#aaa;margin:10px 0 5px}
         lastGoodUrl=hit.url;
         if(hit.meta.track!==lastTrack){
           lastTrack=hit.meta.track;
-          trackInfo.innerHTML='<span class="label">曲情報:</span>'+escapeHtml(hit.meta.track);
+          trackInfo.textContent=hit.meta.track;
           updateArtwork(hit.meta.track);
         }
       }else if(!lastTrack){
-        trackInfo.innerHTML='<span class="label">曲情報:</span>取得できませんでした';
+        trackInfo.textContent='曲情報を取得できませんでした';
       }
     }finally{
       fetching=false; // 例外時もフラグを確実に戻す（戻らないと以後の取得が全部スキップされる）
@@ -784,6 +914,7 @@ label{display:block;color:#aaa;margin:10px 0 5px}
     document.getElementById('eventsInput').value=localStorage.getItem('metalClockEvents')||'';
     document.getElementById('radioUrlInput').value=radioUrl;
     document.getElementById('metaUrlInput').value=customMetaUrl;
+    document.getElementById('gcalUrlInput').value=gcalUrl;
     document.getElementById('settings').className='open';
   };
   document.getElementById('closeSettings').onclick=function(){document.getElementById('settings').className=''};
@@ -792,6 +923,14 @@ label{display:block;color:#aaa;margin:10px 0 5px}
     var newUrl=document.getElementById('radioUrlInput').value.trim();
     customMetaUrl=document.getElementById('metaUrlInput').value.trim();
     localStorage.setItem('metalClockMetaUrl',customMetaUrl);
+    var newGcal=document.getElementById('gcalUrlInput').value.trim();
+    if(newGcal!==gcalUrl){
+      gcalUrl=newGcal;
+      localStorage.setItem('metalClockGcalUrl',gcalUrl);
+      gcalMap={};
+      localStorage.removeItem('metalClockGcalCache');
+      if(gcalUrl)loadGcal();
+    }
     if(newUrl!==radioUrl){
       var wasPlaying=!radio.paused;
       radioUrl=newUrl;
@@ -871,6 +1010,35 @@ label{display:block;color:#aaa;margin:10px 0 5px}
     },wait);
   }
 
+  /* ===================== 無音停止の監視（ウォッチドッグ） =====================
+   * errorイベントが来ない静かな停止（バッファ切れ・回線瞬断・サーバー側の
+   * 一時停止など）を検知する。「再生中のはずなのに再生位置が20秒間
+   * 1ミリも進んでいない」場合は異常とみなして強制再接続する。
+   * ======================================================================== */
+  var lastCT=-1, stallChecks=0;
+  setInterval(function(){
+    if(radio.paused){lastCT=-1;stallChecks=0;return}
+    var ct=radio.currentTime;
+    if(ct===lastCT){
+      stallChecks++;
+      if(stallChecks>=2){ // 10秒×2回=20秒進んでいない
+        stallChecks=0;
+        radioStatus.textContent='再接続中';
+        radio.src=radioUrl;
+        radio.load();
+        radio.play().then(function(){
+          playBtn.textContent='⏸';
+          radioStatus.textContent='LIVE';
+        }).catch(function(){
+          scheduleReconnect(); // 即時復帰に失敗したらバックオフ再試行へ
+        });
+      }
+    }else{
+      stallChecks=0;
+    }
+    lastCT=ct;
+  },10000);
+
   /* ===================== 画面スリープ防止 =====================
    * Wake Lock APIで画面が消えないようにする。
    * - 起動時に即取得を試みる（取れなければユーザー操作後に再試行）
@@ -935,6 +1103,7 @@ label{display:block;color:#aaa;margin:10px 0 5px}
 
   buildClock();
   loadHolidays();
+  loadGcal();
   renderCalendar();
   updateClock();
   fetchNowPlaying();
@@ -942,6 +1111,7 @@ label{display:block;color:#aaa;margin:10px 0 5px}
   setInterval(renderCalendar,600000);
   setInterval(fetchNowPlaying,45000);
   setInterval(loadHolidays,86400000); // 祝日データは1日1回更新（年が変わっても追従）
+  setInterval(loadGcal,1800000); // Googleカレンダーは30分ごとに再取得
 })();
 </script>
 </body>

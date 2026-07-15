@@ -1,5 +1,5 @@
 /* Metal Desk Clock service worker */
-var CACHE = 'metal-clock-v9';
+var CACHE = 'metal-clock-v10';
 var SHELL = [
   './',
   './index.html',
